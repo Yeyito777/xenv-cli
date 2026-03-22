@@ -1,0 +1,9 @@
+{
+  "name": "xenv",
+  "bin": "./bin/xenv",
+  "systemHint": "You have access to nested X11 environments through the `xenv` CLI tool (source at ~/Workspace/Exocortex/external-tools/xenv-cli). Run `xenv -h` for usage reference.",
+  "display": {
+    "label": "Xenv",
+    "color": "#888888"
+  }
+}

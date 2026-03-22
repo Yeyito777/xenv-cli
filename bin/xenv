@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# xenv — Nested X11 environments for Exocortex.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PYTHON="$PROJECT_DIR/.venv/bin/python3"
+
+export PYTHONPATH="$PROJECT_DIR"
+
+usage() {
+    cat <<'EOF'
+xenv — Nested X11 environments.
+
+Each instance is a named Xephyr + dwm desktop, fully isolated from
+the host and from other instances.
+
+Usage: xenv [-e <name>] <command> [args...]
+
+Lifecycle:
+  start <name> [--size WxH]        Start a named environment
+  stop <name>                       Stop a named environment
+  instances                         List all running environments
+  status <name>                     Show details about an environment
+
+Launching:
+  run -e <name> <cmd> [args...]     Run a command (backgrounded)
+  exec -e <name> <cmd> [args...]    Run a command (foreground)
+
+Observation:
+  screenshot -e <name> [-o FILE]    Capture the display as PNG
+  windows -e <name>                 List visible windows
+  display -e <name>                 Print the DISPLAY value
+
+Input:
+  type -e <name> <text>             Type text into focused window
+  key -e <name> <keys...>           Send keystrokes (xdotool format)
+  click -e <name> <x> <y>          Click at coordinates
+  scroll -e <name> <dir> [N]       Scroll mouse wheel
+  move -e <name> <x> <y>           Move mouse cursor
+  drag -e <name> <x1 y1 x2 y2>    Click-and-drag
+  focus -e <name> <wid|title>      Focus a window
+
+Instance selection:
+  -e <name>       Flag (on any command)
+  XENV_INSTANCE   Environment variable
+
+Every command except 'start' and 'instances' requires an instance.
+Run 'xenv <command> --help' for per-command help.
+
+Examples:
+  xenv start exo                                # create environment
+  xenv run -e exo st                            # launch terminal
+  xenv type -e exo "ls -la" && xenv key -e exo Return
+  xenv screenshot -e exo                        # see the result
+  xenv stop exo                                 # tear it down
+  XENV_INSTANCE=exo xenv screenshot             # env var instead of -e
+EOF
+}
+
+if [[ $# -eq 0 ]]; then
+    usage
+    exit 1
+fi
+
+# ── Parse global -e flag from anywhere in argv ──────────────────
+# This mirrors the original tool's behavior: -e is extracted from
+# all positions and exported as XENV_INSTANCE for Python to read.
+
+ARGS=()
+while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "-e" ]]; then
+        [[ $# -lt 2 ]] && { echo "xenv: -e requires an instance name" >&2; exit 1; }
+        export XENV_INSTANCE="$2"
+        shift 2
+    else
+        ARGS+=("$1")
+        shift
+    fi
+done
+set -- "${ARGS[@]}"
+
+if [[ $# -eq 0 ]]; then
+    usage
+    exit 1
+fi
+
+cmd="$1"; shift
+
+case "$cmd" in
+    start|stop|instances|status)
+        exec "$PYTHON" -c "import sys; from src.lifecycle import $cmd; $cmd(sys.argv[1:])" "$@" ;;
+    run)
+        exec "$PYTHON" -c "import sys; from src.launching import run; run(sys.argv[1:])" "$@" ;;
+    exec)
+        exec "$PYTHON" -c "import sys; from src.launching import execute; execute(sys.argv[1:])" "$@" ;;
+    screenshot|windows|display)
+        exec "$PYTHON" -c "import sys; from src.observation import $cmd; $cmd(sys.argv[1:])" "$@" ;;
+    click|move|scroll|drag|focus)
+        exec "$PYTHON" -c "import sys; from src.input import $cmd; $cmd(sys.argv[1:])" "$@" ;;
+    type)
+        exec "$PYTHON" -c "import sys; from src.input import type_text; type_text(sys.argv[1:])" "$@" ;;
+    key)
+        exec "$PYTHON" -c "import sys; from src.input import key; key(sys.argv[1:])" "$@" ;;
+    help|--help|-h)
+        usage ;;
+    *)
+        echo "xenv: unknown command '$cmd'" >&2
+        echo "Run 'xenv --help' for usage." >&2
+        exit 1 ;;
+esac
