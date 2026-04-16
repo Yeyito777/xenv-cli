@@ -47,6 +47,10 @@ def start(argv):
     # Start Xephyr
     xephyr_env = os.environ.copy()
     xephyr_env["DISPLAY"] = host_display
+    xephyr_env["DWM_AI_TAG"] = "1"
+    xephyr_env["DWM_AI_TOKEN"] = f"xenv:{name}"
+    xephyr_env["DWM_AI_LABEL"] = f"xenv: {name}"
+    xephyr_env["DWM_AI_POLICY"] = "autodelete-pristine"
     with open(inst.xephyr_log, "w") as log:
         xephyr_proc = subprocess.Popen(
             ["Xephyr",
