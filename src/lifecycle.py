@@ -54,6 +54,7 @@ def start(argv):
              "-screen", args.size,
              "-resizeable",
              "-xinerama",
+             "-name", f"exo-xenv-{name}",
              "-title", f"xenv: {name}",
              display],
             stdout=log, stderr=log,

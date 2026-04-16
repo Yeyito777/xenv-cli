@@ -43,3 +43,6 @@ directory.
 The host dwm is patched to support `DWM_RUNTIME_DIR`. When set, dwm writes
 logs and state there instead of the default location. The nested dwm uses
 its own directory — host state is never touched.
+
+When starting Xephyr, xenv sets a dedicated WM instance name (`exo-xenv-<name>`)
+so the host dwm can recognize it and auto-place it on its own AI tag.
