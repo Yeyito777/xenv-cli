@@ -34,6 +34,9 @@ xenv stop exo                     # tear it down
 
 Run `xenv <command> --help` for per-command help.
 
+`xenv start` no longer takes a `--size` flag. The host dwm sizes the Xephyr
+window to the AI tag's work area automatically.
+
 ## Architecture
 
 Each instance is a named Xephyr + dwm pair. Runtime state (PIDs, display

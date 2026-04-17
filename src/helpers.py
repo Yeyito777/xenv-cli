@@ -9,7 +9,7 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = PROJECT_DIR / "runtime"
-DEFAULT_SIZE = "1280x800"
+INITIAL_XEPHYR_SIZE = "1280x800"
 
 
 # ── Output helpers ───────────────────────────────────────────────

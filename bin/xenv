@@ -18,7 +18,7 @@ the host and from other instances.
 Usage: xenv [-e <name>] <command> [args...]
 
 Lifecycle:
-  start <name> [--size WxH]        Start a named environment
+  start <name>                      Start a named environment
   stop <name>                       Stop a named environment
   instances                         List all running environments
   status <name>                     Show details about an environment

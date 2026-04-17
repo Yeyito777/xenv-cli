@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from src.helpers import (
-    PROJECT_DIR, RUNTIME_DIR, DEFAULT_SIZE, Instance,
+    PROJECT_DIR, RUNTIME_DIR, INITIAL_XEPHYR_SIZE, Instance,
     die, info, require_instance_name,
     find_free_display, make_env, run_quiet, kill_pidfile,
 )
@@ -20,11 +20,10 @@ from src.helpers import (
 def start(argv):
     p = argparse.ArgumentParser(prog="xenv start", description=(
         "Start a named environment (Xephyr + dwm). "
-        "Idempotent — if already running, prints the display and exits."
+        "Idempotent — if already running, prints the display and exits. "
+        "The host dwm will size the window to its AI tag automatically."
     ))
     p.add_argument("name", nargs="?", help="Instance name (e.g. exo, agent-7, test)")
-    p.add_argument("--size", "-s", default=DEFAULT_SIZE,
-                    help="Initial screen resolution (default: 1280x800)")
     args = p.parse_args(argv)
 
     name = args.name or os.environ.get("XENV_INSTANCE", "")
@@ -55,7 +54,7 @@ def start(argv):
         xephyr_proc = subprocess.Popen(
             ["Xephyr",
              "-br", "-ac", "-noreset",
-             "-screen", args.size,
+             "-screen", INITIAL_XEPHYR_SIZE,
              "-resizeable",
              "-xinerama",
              "-name", f"exo-xenv-{name}",
@@ -104,7 +103,7 @@ def start(argv):
     inst.watcher_pidfile.write_text(str(watcher_proc.pid))
 
     time.sleep(0.5)
-    info(f"'{name}' started on {display} ({args.size}, PID {xephyr_proc.pid})")
+    info(f"'{name}' started on {display} (AI-sized by host dwm, PID {xephyr_proc.pid})")
     print(display)
 
 
