@@ -38,9 +38,7 @@ class Instance:
         self.pidfile = self.dir / "xephyr.pid"
         self.wm_pidfile = self.dir / "wm.pid"
         self.watcher_pidfile = self.dir / "watcher.pid"
-        self.grab_hotkey_pidfile = self.dir / "grab-hotkey.pid"
         self.display_file = self.dir / "display"
-        self.host_display_file = self.dir / "host-display"
         self.screenshot_dir = self.dir / "screenshots"
         self.xephyr_log = self.dir / "xephyr.log"
         self.dwm_dir = self.dir / "dwm"
@@ -50,12 +48,6 @@ class Instance:
         if self.display_file.exists():
             return self.display_file.read_text().strip()
         return ""
-
-    @property
-    def host_display(self):
-        if self.host_display_file.exists():
-            return self.host_display_file.read_text().strip()
-        return os.environ.get("DISPLAY", ":0")
 
     @property
     def running(self):
@@ -285,30 +277,3 @@ def send_type(display, text):
     cmd += [text]
     subprocess.run(cmd, env=env)
 
-
-def find_xephyr_window_id(instance: Instance) -> str | None:
-    """Locate the host Xephyr window for an instance."""
-    env = make_env(instance.host_display)
-    title = f"xenv: {instance.name}"
-    out = run_quiet(["xdotool", "search", "--onlyvisible", "--name", f"^{title}$"], env=env)
-    if out:
-        return out.split("\n")[0]
-    out = run_quiet(["xdotool", "search", "--onlyvisible", "--class", f"exo-xenv-{instance.name}"], env=env)
-    if out:
-        return out.split("\n")[0]
-    return None
-
-
-def toggle_host_grab(instance: Instance) -> bool:
-    """Toggle Xephyr's host keyboard/mouse grab for the instance.
-
-    Xephyr has a built-in runtime toggle on Ctrl+Shift+Space. We focus the host
-    Xephyr window and synthesize that key chord on the host display.
-    """
-    wid = find_xephyr_window_id(instance)
-    if not wid:
-        return False
-    env = make_env(instance.host_display)
-    subprocess.run(["xdotool", "windowactivate", "--sync", wid], env=env, check=False)
-    subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+shift+space"], env=env, check=False)
-    return True

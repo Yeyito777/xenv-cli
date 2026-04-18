@@ -89,7 +89,6 @@ def start(argv):
     if xephyr_pid is not None:
         inst.pidfile.write_text(str(xephyr_pid))
     inst.display_file.write_text(display)
-    inst.host_display_file.write_text(host_display)
 
     # Start dwm
     inst.dwm_dir.mkdir(exist_ok=True)
@@ -148,12 +147,10 @@ def stop(argv):
             )
     time.sleep(0.2)
 
-    kill_pidfile(inst.grab_hotkey_pidfile)
     kill_pidfile(inst.watcher_pidfile)
     kill_pidfile(inst.wm_pidfile)
     kill_pidfile(inst.pidfile)
     inst.display_file.unlink(missing_ok=True)
-    inst.host_display_file.unlink(missing_ok=True)
 
     info(f"'{name}' stopped (was on {display})")
 

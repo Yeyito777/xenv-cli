@@ -6,7 +6,7 @@ import sys
 
 from src.helpers import (
     Instance, die, require_instance_name,
-    make_env, run_quiet, send_keys, send_type, toggle_host_grab,
+    make_env, run_quiet, send_keys, send_type,
 )
 
 
@@ -197,23 +197,4 @@ def focus(argv):
     wname = run_quiet(["xdotool", "getwindowname", wid], env=env) or ""
     suffix = f" ({wname})" if wname else ""
     print(f"focused {wid}{suffix}")
-
-
-# ── toggle_grab ───────────────────────────────────────────────────
-
-def toggle_grab(argv):
-    p = argparse.ArgumentParser(prog="xenv toggle-grab", description=(
-        "Toggle Xephyr host keyboard/mouse grab for the instance."
-    ))
-    p.parse_args(argv)
-
-    name = require_instance_name()
-    inst = Instance(name)
-    inst.require_running()
-
-    if not toggle_host_grab(inst):
-        die("toggle-grab: could not find host Xephyr window")
-
-    print("toggled host grab")
-
 
