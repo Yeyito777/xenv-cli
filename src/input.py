@@ -1,4 +1,4 @@
-"""Input commands: click, type_text, key, move, scroll, drag, focus, toggle_grab."""
+"""Input commands: click, type_text, key, move, scroll, drag, focus."""
 
 import argparse
 import subprocess
