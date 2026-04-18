@@ -11,7 +11,7 @@ from pathlib import Path
 from src.helpers import (
     PROJECT_DIR, RUNTIME_DIR, INITIAL_XEPHYR_SIZE, Instance,
     die, info, require_instance_name,
-    find_free_display, make_env, run_quiet, kill_pidfile,
+    find_free_display, make_env, run_quiet, kill_pidfile, spawn_persistent,
 )
 
 
@@ -50,60 +50,72 @@ def start(argv):
     xephyr_env["DWM_AI_TOKEN"] = f"xenv:{name}"
     xephyr_env["DWM_AI_LABEL"] = f"xenv: {name}"
     xephyr_env["DWM_AI_POLICY"] = "autodelete-pristine"
-    with open(inst.xephyr_log, "w") as log:
-        xephyr_proc = subprocess.Popen(
-            ["Xephyr",
-             "-br", "-ac", "-noreset",
-             "-screen", INITIAL_XEPHYR_SIZE,
-             "-resizeable",
-             "-xinerama",
-             "-name", f"exo-xenv-{name}",
-             "-title", f"xenv: {name}",
-             display],
-            stdout=log, stderr=log,
-            env=xephyr_env,
-            start_new_session=True,
-        )
+    inst.xephyr_log.write_text("")
+    _xephyr_unit, xephyr_pid = spawn_persistent(
+        [
+            "Xephyr",
+            "-br", "-ac", "-noreset",
+            "-screen", INITIAL_XEPHYR_SIZE,
+            "-resizeable",
+            "-xinerama",
+            "-name", f"exo-xenv-{name}",
+            "-title", f"xenv: {name}",
+            display,
+        ],
+        env=xephyr_env,
+        unit_prefix=f"xenv-{name}-xephyr",
+        stdout_path=inst.xephyr_log,
+        stderr_path=inst.xephyr_log,
+    )
 
     # Wait for display socket
     num = display.lstrip(":")
     deadline = time.time() + 5
     while not Path(f"/tmp/.X11-unix/X{num}").exists():
-        if xephyr_proc.poll() is not None:
-            die(f"Xephyr failed to start. See {inst.xephyr_log}")
+        if xephyr_pid is not None:
+            try:
+                os.kill(xephyr_pid, 0)
+            except ProcessLookupError:
+                die(f"Xephyr failed to start. See {inst.xephyr_log}")
         if time.time() >= deadline:
-            xephyr_proc.kill()
+            if xephyr_pid is not None:
+                try:
+                    os.kill(xephyr_pid, 9)
+                except ProcessLookupError:
+                    pass
             die("Xephyr timed out")
         time.sleep(0.1)
 
-    inst.pidfile.write_text(str(xephyr_proc.pid))
+    if xephyr_pid is not None:
+        inst.pidfile.write_text(str(xephyr_pid))
     inst.display_file.write_text(display)
+    inst.host_display_file.write_text(host_display)
 
     # Start dwm
     inst.dwm_dir.mkdir(exist_ok=True)
     dwm_env = make_env(display)
     dwm_env["DWM_RUNTIME_DIR"] = str(inst.dwm_dir)
-    dwm_proc = subprocess.Popen(
+    _dwm_unit, dwm_pid = spawn_persistent(
         ["dwm"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         env=dwm_env,
-        start_new_session=True,
+        unit_prefix=f"xenv-{name}-dwm",
     )
-    inst.wm_pidfile.write_text(str(dwm_proc.pid))
+    if dwm_pid is not None:
+        inst.wm_pidfile.write_text(str(dwm_pid))
 
     # Start resize watcher
     watcher_env = make_env(display)
     watcher_env["PYTHONPATH"] = str(PROJECT_DIR)
-    watcher_proc = subprocess.Popen(
+    _watcher_unit, watcher_pid = spawn_persistent(
         [sys.executable, str(PROJECT_DIR / "src" / "resize_watcher.py")],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         env=watcher_env,
-        start_new_session=True,
+        unit_prefix=f"xenv-{name}-watcher",
     )
-    inst.watcher_pidfile.write_text(str(watcher_proc.pid))
+    if watcher_pid is not None:
+        inst.watcher_pidfile.write_text(str(watcher_pid))
 
     time.sleep(0.5)
-    info(f"'{name}' started on {display} (AI-sized by host dwm, PID {xephyr_proc.pid})")
+    info(f"'{name}' started on {display} (AI-sized by host dwm, PID {xephyr_pid or '?'})")
     print(display)
 
 
@@ -136,10 +148,12 @@ def stop(argv):
             )
     time.sleep(0.2)
 
+    kill_pidfile(inst.grab_hotkey_pidfile)
     kill_pidfile(inst.watcher_pidfile)
     kill_pidfile(inst.wm_pidfile)
     kill_pidfile(inst.pidfile)
     inst.display_file.unlink(missing_ok=True)
+    inst.host_display_file.unlink(missing_ok=True)
 
     info(f"'{name}' stopped (was on {display})")
 

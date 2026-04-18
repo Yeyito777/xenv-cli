@@ -2,9 +2,13 @@
 
 import os
 import re
+import shlex
+import shutil
 import signal
 import subprocess
 import sys
+import time
+import uuid
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -34,7 +38,9 @@ class Instance:
         self.pidfile = self.dir / "xephyr.pid"
         self.wm_pidfile = self.dir / "wm.pid"
         self.watcher_pidfile = self.dir / "watcher.pid"
+        self.grab_hotkey_pidfile = self.dir / "grab-hotkey.pid"
         self.display_file = self.dir / "display"
+        self.host_display_file = self.dir / "host-display"
         self.screenshot_dir = self.dir / "screenshots"
         self.xephyr_log = self.dir / "xephyr.log"
         self.dwm_dir = self.dir / "dwm"
@@ -44,6 +50,12 @@ class Instance:
         if self.display_file.exists():
             return self.display_file.read_text().strip()
         return ""
+
+    @property
+    def host_display(self):
+        if self.host_display_file.exists():
+            return self.host_display_file.read_text().strip()
+        return os.environ.get("DISPLAY", ":0")
 
     @property
     def running(self):
@@ -119,6 +131,110 @@ def run_quiet(cmd, env=None):
     return None
 
 
+def _sanitize_unit_fragment(value):
+    cleaned = re.sub(r"[^A-Za-z0-9:_-]+", "-", value).strip("-")
+    return cleaned or "job"
+
+
+def spawn_persistent(cmd, *, env=None, cwd=None, unit_prefix="xenv", stdout_path=None, stderr_path=None, wait_for_pid=True):
+    """Spawn a long-lived process under the user systemd manager when available.
+
+    Falls back to a detached subprocess when systemd-run is unavailable.
+    Returns (unit_name | None, pid | None).
+    """
+    env_map = dict(env or os.environ)
+    cmd_list = [str(part) for part in cmd]
+    cwd_str = str(cwd) if cwd is not None else None
+
+    systemd_run = shutil.which("systemd-run")
+    systemctl = shutil.which("systemctl")
+    if systemd_run and systemctl:
+        unit = f"exo-{_sanitize_unit_fragment(unit_prefix)}-{uuid.uuid4().hex[:8]}"
+        script = f"exec {shlex.join(cmd_list)}"
+
+        if stdout_path and stderr_path and Path(stdout_path) == Path(stderr_path):
+            target = shlex.quote(str(stdout_path))
+            script += f" >> {target} 2>&1"
+        else:
+            if stdout_path:
+                script += f" >> {shlex.quote(str(stdout_path))}"
+            else:
+                script += " >/dev/null"
+            if stderr_path:
+                script += f" 2>> {shlex.quote(str(stderr_path))}"
+            else:
+                script += " 2>/dev/null"
+
+        run_cmd = [
+            systemd_run,
+            "--user",
+            "--quiet",
+            "--collect",
+            "-p",
+            "ExitType=cgroup",
+            "--unit",
+            unit,
+        ]
+        if cwd_str is not None:
+            run_cmd.extend(["--working-directory", cwd_str])
+        for key, value in sorted(env_map.items()):
+            if "\x00" in key or "\x00" in value:
+                continue
+            run_cmd.extend(["--setenv", f"{key}={value}"])
+        run_cmd.extend(["bash", "-lc", script])
+
+        result = subprocess.run(run_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout or "systemd-run failed").strip())
+
+        pid = None
+        if wait_for_pid:
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                show = subprocess.run(
+                    [systemctl, "--user", "show", "--property", "MainPID", "--value", unit],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                raw = show.stdout.strip()
+                if raw and raw != "0":
+                    try:
+                        pid = int(raw)
+                        break
+                    except ValueError:
+                        pass
+                time.sleep(0.1)
+        return unit, pid
+
+    if stdout_path is not None:
+        stdout_handle = open(stdout_path, "ab")
+    else:
+        stdout_handle = subprocess.DEVNULL
+
+    if stderr_path is not None and stdout_path is not None and Path(stderr_path) == Path(stdout_path):
+        stderr_handle = stdout_handle
+    elif stderr_path is not None:
+        stderr_handle = open(stderr_path, "ab")
+    else:
+        stderr_handle = subprocess.DEVNULL
+    try:
+        proc = subprocess.Popen(
+            cmd_list,
+            cwd=cwd_str,
+            env=env_map,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+            start_new_session=True,
+        )
+    finally:
+        if stdout_path is not None:
+            stdout_handle.close()
+        if stderr_path is not None and stderr_handle is not stdout_handle:
+            stderr_handle.close()
+    return None, proc.pid
+
+
 def kill_pidfile(pidfile):
     """Send SIGTERM to the PID in a pidfile, then remove it."""
     if pidfile.exists():
@@ -168,3 +284,31 @@ def send_type(display, text):
         cmd += ["--delay", "12", "--"]
     cmd += [text]
     subprocess.run(cmd, env=env)
+
+
+def find_xephyr_window_id(instance: Instance) -> str | None:
+    """Locate the host Xephyr window for an instance."""
+    env = make_env(instance.host_display)
+    title = f"xenv: {instance.name}"
+    out = run_quiet(["xdotool", "search", "--onlyvisible", "--name", f"^{title}$"], env=env)
+    if out:
+        return out.split("\n")[0]
+    out = run_quiet(["xdotool", "search", "--onlyvisible", "--class", f"exo-xenv-{instance.name}"], env=env)
+    if out:
+        return out.split("\n")[0]
+    return None
+
+
+def toggle_host_grab(instance: Instance) -> bool:
+    """Toggle Xephyr's host keyboard/mouse grab for the instance.
+
+    Xephyr has a built-in runtime toggle on Ctrl+Shift+Space. We focus the host
+    Xephyr window and synthesize that key chord on the host display.
+    """
+    wid = find_xephyr_window_id(instance)
+    if not wid:
+        return False
+    env = make_env(instance.host_display)
+    subprocess.run(["xdotool", "windowactivate", "--sync", wid], env=env, check=False)
+    subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+shift+space"], env=env, check=False)
+    return True

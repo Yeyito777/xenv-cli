@@ -53,6 +53,7 @@ Examples:
   xenv run -e exo st                            # launch terminal
   xenv type -e exo "ls -la" && xenv key -e exo Return
   xenv screenshot -e exo                        # see the result
+  xenv toggle-grab -e exo                       # toggle host grab
   xenv stop exo                                 # tear it down
   XENV_INSTANCE=exo xenv screenshot             # env var instead of -e
 EOF
@@ -102,6 +103,8 @@ case "$cmd" in
         exec "$PYTHON" -c "import sys; from src.input import type_text; type_text(sys.argv[1:])" "$@" ;;
     key)
         exec "$PYTHON" -c "import sys; from src.input import key; key(sys.argv[1:])" "$@" ;;
+    toggle-grab)
+        exec "$PYTHON" -c "import sys; from src.input import toggle_grab; toggle_grab(sys.argv[1:])" "$@" ;;
     help|--help|-h)
         usage ;;
     *)

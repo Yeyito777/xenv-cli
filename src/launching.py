@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-from src.helpers import Instance, die, make_env, require_instance_name
+from src.helpers import Instance, die, make_env, require_instance_name, spawn_persistent
 
 
 # ── run ──────────────────────────────────────────────────────────
@@ -27,13 +27,15 @@ Examples:
     inst.require_running()
 
     env = make_env(inst.display)
-    proc = subprocess.Popen(
+    _unit, pid = spawn_persistent(
         argv,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         env=env,
-        start_new_session=True,
+        unit_prefix=f"xenv-{name}-run",
     )
-    print(f"launched: {' '.join(argv)} (PID {proc.pid})")
+    if pid is not None:
+        print(f"launched: {' '.join(argv)} (PID {pid})")
+    else:
+        print(f"launched: {' '.join(argv)}")
 
 
 # ── execute (exec) ───────────────────────────────────────────────

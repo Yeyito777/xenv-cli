@@ -1,14 +1,12 @@
-"""Input commands: click, type_text, key, move, scroll, drag, focus."""
+"""Input commands: click, type_text, key, move, scroll, drag, focus, toggle_grab."""
 
 import argparse
-import os
-import re
 import subprocess
 import sys
 
 from src.helpers import (
     Instance, die, require_instance_name,
-    make_env, run_quiet, send_keys, send_type,
+    make_env, run_quiet, send_keys, send_type, toggle_host_grab,
 )
 
 
@@ -199,3 +197,23 @@ def focus(argv):
     wname = run_quiet(["xdotool", "getwindowname", wid], env=env) or ""
     suffix = f" ({wname})" if wname else ""
     print(f"focused {wid}{suffix}")
+
+
+# ── toggle_grab ───────────────────────────────────────────────────
+
+def toggle_grab(argv):
+    p = argparse.ArgumentParser(prog="xenv toggle-grab", description=(
+        "Toggle Xephyr host keyboard/mouse grab for the instance."
+    ))
+    p.parse_args(argv)
+
+    name = require_instance_name()
+    inst = Instance(name)
+    inst.require_running()
+
+    if not toggle_host_grab(inst):
+        die("toggle-grab: could not find host Xephyr window")
+
+    print("toggled host grab")
+
+
