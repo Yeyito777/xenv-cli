@@ -1,7 +1,7 @@
 {
   "name": "xenv",
   "bin": "./bin/xenv",
-  "systemHint": "You have access to nested X11 environments through the `xenv` CLI tool (source at ~/Workspace/Exocortex/external-tools/xenv-cli). Run `xenv -h` for usage reference. The environment's window manager is a fork of dwm that you can find in ~/Config/dwm check ~/Config/dwm/config.h for keybinds if you need to open new tags, delete windows, etc...",
+  "systemHint": "Never EVER test things with xdotool, or spawn window programs for \"testing\" on the main/host display. Use the xenv-cli external tool instead. You have access to nested X11 environments through the `xenv` CLI tool (source at ~/Workspace/Exocortex/external-tools/xenv-cli). Run `xenv -h` for usage reference. The environment's window manager is a fork of dwm that you can find in ~/Config/dwm check ~/Config/dwm/config.h for keybinds if you need to open new tags, delete windows, etc...",
   "display": {
     "label": "Xenv",
     "color": "#888888"
